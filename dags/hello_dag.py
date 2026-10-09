@@ -3,7 +3,7 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime
 
 
-def hello()
+def hello():
     print("Я изменил DAG!")
 
 
