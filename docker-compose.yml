@@ -1,10 +1,41 @@
+
 services:
+  init-dags:
+    image: alpine:3.22
+    user: "0:0"
+    command: ["sh", "-c", "chown -R 65533:65533 /git && chmod -R a+rX /git"]
+    volumes:
+      - dags-data:/git
+
+  git-sync:
+    image: registry.k8s.io/git-sync/git-sync:v4.3.0
+    user: "65533:65533"
+    restart: unless-stopped
+    depends_on:
+      init-dags:
+        condition: service_completed_successfully
+    environment:
+      GITSYNC_REPO: "https://github.com/BigYaitso1/study.git"
+      GITSYNC_REF: "main"
+      GITSYNC_ROOT: "/git"
+      GITSYNC_LINK: "repo"
+      GITSYNC_PERIOD: "30s"
+      GITSYNC_DEPTH: "1"
+    volumes:
+      - dags-data:/git
+
   airflow:
     image: apache/airflow:2.10.5
     ports:
       - "8081:8080"
     volumes:
-      - ./dags:/opt/airflow/dags
+      - dags-data:/opt/airflow/dags
     environment:
-      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: "/opt/airflow/dags/repo/dags"
     command: standalone
+    depends_on:
+      - git-sync
+
+volumes:
+  dags-data:
