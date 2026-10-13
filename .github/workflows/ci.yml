@@ -1,9 +1,15 @@
+
 name: Airflow CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - setup-environments
+
   pull_request:
+    branches:
+      - main
 
 jobs:
   check-dag:
@@ -13,5 +19,10 @@ jobs:
       - name: Get repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Check Python syntax
-        run: python -m compileall dags
+        run: python -m compileall -q dags

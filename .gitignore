@@ -4,3 +4,5 @@ __pycache__/
 logs/
 airflow.db
 webserver_config.py
+docker-compose.backup.yml
+docker-compose.before-fix.yml
