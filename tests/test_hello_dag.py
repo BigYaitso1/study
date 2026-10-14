@@ -1,6 +1,5 @@
 
 import os
-import sys
 import unittest
 
 from airflow.models import DagBag
@@ -10,8 +9,6 @@ DAGS_FOLDER = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "dags")
 )
 
-sys.path.insert(0, DAGS_FOLDER)
-
 
 class TestHelloDag(unittest.TestCase):
     @classmethod
@@ -19,8 +16,11 @@ class TestHelloDag(unittest.TestCase):
         cls.dag_bag = DagBag(
             dag_folder=DAGS_FOLDER,
             include_examples=False,
+            read_dags_from_db=False,
         )
-        cls.dag = cls.dag_bag.get_dag("hello_dag")
+        # Берём DAG прямо из загруженных файлов,
+        # не обращаясь к метабазе Airflow.
+        cls.dag = cls.dag_bag.dags.get("hello_dag")
 
     def test_dag_is_loaded(self):
         self.assertIsNotNone(self.dag)
