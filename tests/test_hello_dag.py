@@ -32,7 +32,7 @@ class TestHelloDag(unittest.TestCase):
         self.assertIn("hello_task", self.dag.task_ids)
 
     def test_dag_has_no_schedule(self):
-    self.assertIsNone(self.dag.schedule_interval)
+    	self.assertIsNone(self.dag.schedule_interval)
 
     def test_dag_does_not_catchup(self):
         self.assertFalse(self.dag.catchup)
