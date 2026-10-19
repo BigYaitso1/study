@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 def hello():
-    print("Я изменил DAG!")
+    print("STAGING TEST - version 2")
 
 
 with DAG(
