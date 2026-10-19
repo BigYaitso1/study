@@ -1,41 +1,149 @@
 
 services:
-  init-dags:
+  init-prod-dags:
     image: alpine:3.22
     user: "0:0"
-    command: ["sh", "-c", "chown -R 65533:65533 /git && chmod -R a+rX /git"]
+    command: ["sh", "-c", "mkdir -p /git && chown -R 65533:0 /git && chmod -R g+rwX /git"]
     volumes:
-      - dags-data:/git
+      - dags-prod-data:/git
 
-  git-sync:
+  init-staging-dags:
+    image: alpine:3.22
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /git && chown -R 65533:0 /git && chmod -R g+rwX /git"]
+    volumes:
+      - dags-staging-data:/git
+
+  postgres-prod:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-prod-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-staging:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${STAGING_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${STAGING_POSTGRES_DB}
+    volumes:
+      - postgres-staging-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  git-sync-prod:
     image: registry.k8s.io/git-sync/git-sync:v4.3.0
-    user: "65533:65533"
+    user: "65533:0"
     restart: unless-stopped
     depends_on:
-      init-dags:
+      init-prod-dags:
         condition: service_completed_successfully
     environment:
       GITSYNC_REPO: "https://github.com/BigYaitso1/study.git"
-      GITSYNC_REF: "main"
+      GITSYNC_REF: "production"
       GITSYNC_ROOT: "/git"
       GITSYNC_LINK: "repo"
       GITSYNC_PERIOD: "30s"
       GITSYNC_DEPTH: "1"
     volumes:
-      - dags-data:/git
+      - dags-prod-data:/git
+
+  git-sync-staging:
+    image: registry.k8s.io/git-sync/git-sync:v4.3.0
+    user: "65533:0"
+    restart: unless-stopped
+    depends_on:
+      init-staging-dags:
+        condition: service_completed_successfully
+    environment:
+      GITSYNC_REPO: "https://github.com/BigYaitso1/study.git"
+      GITSYNC_REF: "setup-environments"
+      GITSYNC_ROOT: "/git"
+      GITSYNC_LINK: "repo"
+      GITSYNC_PERIOD: "30s"
+      GITSYNC_DEPTH: "1"
+    volumes:
+      - dags-staging-data:/git
 
   airflow:
     image: apache/airflow:2.10.5
+    restart: unless-stopped
     ports:
       - "8081:8080"
-    volumes:
-      - dags-data:/opt/airflow/dags
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      AIRFLOW__CORE__DAGS_FOLDER: "/opt/airflow/dags/repo/dags"
-    command: standalone
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/repo/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-prod:5432/${POSTGRES_DB}
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__WEBSERVER__SECRET_KEY: "${AIRFLOW_PROD_SECRET_KEY}"
+      AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+    volumes:
+      - dags-prod-data:/opt/airflow/dags:ro
+      - airflow-prod-logs:/opt/airflow/logs
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        airflow db migrate
+        airflow users create --username "$${AIRFLOW_ADMIN_USERNAME}" --password "$${AIRFLOW_ADMIN_PASSWORD}" --firstname Admin --lastname User --role Admin --email admin@example.com || true
+        airflow scheduler &
+        exec airflow webserver
     depends_on:
-      - git-sync
+      postgres-prod:
+        condition: service_healthy
+      git-sync-prod:
+        condition: service_started
+
+  airflow-staging:
+    image: apache/airflow:2.10.5
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/repo/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${STAGING_POSTGRES_USER}:${STAGING_POSTGRES_PASSWORD}@postgres-staging:5432/${STAGING_POSTGRES_DB}
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__WEBSERVER__SECRET_KEY: "${AIRFLOW_PROD_SECRET_KEY}"
+      AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+    volumes:
+      - dags-staging-data:/opt/airflow/dags:ro
+      - airflow-staging-logs:/opt/airflow/logs
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        airflow db migrate
+        airflow users create --username "$${AIRFLOW_ADMIN_USERNAME}" --password "$${AIRFLOW_ADMIN_PASSWORD}" --firstname Admin --lastname User --role Admin --email admin@example.com || true
+        airflow scheduler &
+        exec airflow webserver
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+      git-sync-staging:
+        condition: service_started
 
 volumes:
-  dags-data:
+  dags-prod-data:
+  dags-staging-data:
+  airflow-prod-logs:
+  airflow-staging-logs:
+  postgres-prod-data:
+  postgres-staging-data:
