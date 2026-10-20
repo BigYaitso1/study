@@ -3,6 +3,7 @@ import os
 import unittest
 
 from airflow.models import DagBag
+from airflow.operators.python import PythonOperator
 
 
 DAGS_FOLDER = os.path.abspath(
@@ -18,8 +19,6 @@ class TestHelloDag(unittest.TestCase):
             include_examples=False,
             read_dags_from_db=False,
         )
-        # Берём DAG прямо из загруженных файлов,
-        # не обращаясь к метабазе Airflow.
         cls.dag = cls.dag_bag.dags.get("hello_dag")
 
     def test_dag_is_loaded(self):
@@ -31,8 +30,15 @@ class TestHelloDag(unittest.TestCase):
     def test_dag_has_expected_task(self):
         self.assertIn("hello_task", self.dag.task_ids)
 
+    def test_dag_has_only_expected_task(self):
+        self.assertEqual(self.dag.task_ids, ["hello_task"])
+
+    def test_task_uses_python_operator(self):
+        task = self.dag.get_task("hello_task")
+        self.assertIsInstance(task, PythonOperator)
+
     def test_dag_has_no_schedule(self):
-    	self.assertIsNone(self.dag.schedule_interval)
+        self.assertIsNone(self.dag.schedule_interval)
 
     def test_dag_does_not_catchup(self):
         self.assertFalse(self.dag.catchup)
