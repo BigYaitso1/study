@@ -3,8 +3,8 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime
 
 
-def hello():
-    print("STAGING TEST - version 2")
+def broken_function(
+    print("Я изменил DAG!")
 
 
 with DAG(
