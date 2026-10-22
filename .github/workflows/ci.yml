@@ -6,11 +6,12 @@ on:
     branches:
       - main
       - setup-environments
+      - production
 
   pull_request:
     branches:
       - main
-
+      - production
 jobs:
   check-dag:
     runs-on: ubuntu-latest
